@@ -1,42 +1,48 @@
 from flask import Flask, request, render_template
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import nltk
-from string import punctuation
 import re
 from nltk.corpus import stopwords
+import string
 
-nltk.download('stopwords')
-
-set(stopwords.words('english'))
+# Download stopwords if not already available
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords')
 
 app = Flask(__name__)
+stop_words = set(stopwords.words('english'))
+analyzer = SentimentIntensityAnalyzer()
 
 @app.route('/')
-def my_form():
+def form():
     return render_template('form.html')
 
 @app.route('/', methods=['POST'])
-def my_form_post():
-    stop_words = stopwords.words('english')
-    
-    #convert to lowercase
-    text1 = request.form['text1'].lower()
-    
-    text_final = ''.join(c for c in text1 if not c.isdigit())
-    
-    #remove punctuations
-    #text3 = ''.join(c for c in text2 if c not in punctuation)
-        
-    #remove stopwords    
-    processed_doc1 = ' '.join([word for word in text_final.split() if word not in stop_words])
+def analyze_sentiment():
+    try:
+        # Get and clean user input
+        text_input = request.form.get('text1', '').lower()
+        text_no_digits = re.sub(r'\d+', '', text_input)
+        text_clean = ''.join(c for c in text_no_digits if c not in string.punctuation)
+        processed_text = ' '.join([word for word in text_clean.split() if word not in stop_words])
 
-    sa = SentimentIntensityAnalyzer()
-    dd = sa.polarity_scores(text=processed_doc1)
-    compound = round((1 + dd['compound'])/2, 2)
+        # Perform sentiment analysis
+        scores = analyzer.polarity_scores(processed_text)
+        compound_score = round((1 + scores['compound']) / 2, 2)  # Normalize to 0-1
 
-    return render_template('form.html', final=compound, text1=text_final,text2=dd['pos'],text5=dd['neg'],text4=compound,text3=dd['neu'])
+        return render_template(
+            'form.html',
+            final=compound_score,
+            text1=text_clean,
+            text2=scores['pos'],
+            text3=scores['neu'],
+            text4=compound_score,
+            text5=scores['neg']
+        )
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 if __name__ == "__main__":
     app.run(debug=True, host="127.0.0.1", port=5002, threaded=True)
